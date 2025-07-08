@@ -88,10 +88,10 @@ class BalanceCarController:
             Kp=0.1,     # 角度环比例增益（值越大，恢复平衡越强）
             Ki=0.0050,     # 角度环积分增益
             Kd=0.0,     # 角度环微分增益（减小过冲）
-            max_out=2.0, # 最大输出速度(m/s)
-            max_iout=1.0 # 最大积分输出
+            max_out=10.0, # 最大输出速度(m/s)
+            max_iout=5.0 # 最大积分输出
         )
-        self.base_target_pitch=7.57# 基础平衡俯仰角
+        self.base_target_pitch=9.5# 基础平衡俯仰角
         self.target_pitch = 0.0  # 目标俯仰角
         
         # 2. 速度环PID控制器 (输出电机PWM)
@@ -100,7 +100,7 @@ class BalanceCarController:
             Kp=2000.0,   # 速度环比例增益（值越大，响应越快）
             Ki=100.0,     # 速度环积分增益（消除稳态误差）
             Kd=0.0,    # 速度环微分增益（抑制振荡）
-            max_out=3000.0,  # 最大输出PWM
+            max_out=6000.0,  # 最大输出PWM
             max_iout=1000.0  # 最大积分输出
         )
         self.right_speed_pid = PIDController(
@@ -108,7 +108,7 @@ class BalanceCarController:
             Kp=2000.0,   # 速度环比例增益（值越大，响应越快）
             Ki=100.0,     # 速度环积分增益（消除稳态误差）
             Kd=0.0,    # 速度环微分增益（抑制振荡）
-            max_out=3000.0,  # 最大输出PWM
+            max_out=6000.0,  # 最大输出PWM
             max_iout=1000.0  # 最大积分输出
         )
         self.target_speed = 0.0  # 目标速度(m/s)
@@ -116,7 +116,7 @@ class BalanceCarController:
         # 转向控制PID
         self.steering_pid = PIDController(
             mode=PIDController.PID_POSITION,
-            Kp=-0.01,
+            Kp=0.0,#-0.01,
             Ki=0.0,
             Kd=0.0,
             max_out=1.0,
@@ -125,9 +125,9 @@ class BalanceCarController:
         self.target_heading = 0.0  # 目标偏航角(度)
         
         # 速度环外部目标速度->期望倾角 PID 控制器
-        self.speed2angle_pid = PIDController(
+        self.speed_to_angle_pid = PIDController(
             mode=PIDController.PID_POSITION,
-            Kp=0.5,   # 速度到倾角的比例增益（需根据实际调试）
+            Kp=-10.0,   # 速度到倾角的比例增益（需根据实际调试）
             Ki=0.01,  # 积分增益
             Kd=0.0,   # 微分增益
             max_out=10.0,  # 最大期望倾角（度）
@@ -179,9 +179,10 @@ class BalanceCarController:
         )
         
         # 4. 速度环外部：目标速度->期望倾角
-        # 期望倾角 = speed2angle_pid(实际速度, 目标速度)
+        # 期望倾角 = speedtoangle_pid(实际速度, 目标速度)
+        target_speed = 1.0
         current_speed = (current_left_speed + current_right_speed) / 2.0
-        delta_pitch = self.speed2angle_pid.compute(
+        delta_pitch = self.speed_to_angle_pid.compute(
             feedback=current_speed,
             setpoint=self.target_speed
         )
@@ -190,7 +191,7 @@ class BalanceCarController:
         # 计算速度控制输出 (外环)
         target_speed_from_angle = self.angle_pid.compute(
             feedback=filtered_pitch,
-            setpoint=self.base_target_pitch + delta_pitch
+            setpoint=self.base_target_pitch #+ delta_pitch
         )
 
         # 5. 计算转向控制输出
@@ -201,7 +202,7 @@ class BalanceCarController:
             setpoint=self.target_heading
         )
         # 合并遥控目标速度
-        print(target_speed_from_steering)
+        #print(target_speed_from_steering)
         left_target_speed  = target_speed_from_angle  - target_speed_from_steering
         right_target_speed = target_speed_from_angle + target_speed_from_steering
 
@@ -220,8 +221,8 @@ class BalanceCarController:
         self.right_motor.set_pwm(right_motor_output)
 
         # 9. 调试输出
-        #if self.debug_enabled and self.loop_count % self.debug_interval == 0:
-            #print(f"实际俯仰角: {filtered_pitch:.2f}°, 目标俯仰角: {raw_gyro[1]:.2f}°")
+        if self.debug_enabled and self.loop_count % self.debug_interval == 0:
+            print(f"实际俯仰角: {filtered_pitch:.2f}°, 目标俯仰角: {raw_gyro[1]:.2f}°")
             #print(f"当前左侧速度: {current_left_speed:.2f}m/s, 当前右侧速度: {current_right_speed:.2f}m/s")
             #print(f"速度调整量: {target_pitch:.2f}°")
             #print(f"平衡输出: {balance_output:.1f}, 转向输出: {steering_output:.1f}")
@@ -300,7 +301,7 @@ class BalanceCarController:
                 #for idx, ch in enumerate(self.ccd_tracker.channels):
                     #angle = self.ccd_tracker.get_line_angle(idx)
                     #print(f"[CCD{ch}] 当前角度偏差: {angle:.2f}°")
-                print(f"[CCD{0}] 当前角度偏差: {self.ccd_tracker.get_line_angle(0):.2f}°")
+                #print(f"[CCD{0}] 当前角度偏差: {self.ccd_tracker.get_line_angle(0):.2f}°")
                 if switch2.value() != state2:
                     print("Test program stop.")
                     break
@@ -351,6 +352,3 @@ if __name__ == "__main__":
     
     # 启动平衡小车
     car_controller.start()
-
-
-
