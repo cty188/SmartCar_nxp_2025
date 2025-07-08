@@ -1,0 +1,3 @@
+逐飞助手是一款多功能的上位机软件，集成了串口助手、虚拟示波器以及摄像头图像显示等多种实用功能。
+
+https://gitee.com/seekfree/seekfree_assistant

@@ -1,0 +1,6 @@
+
+Thonny 开源项目地址
+    https://github.com/thonny/thonny
+
+可以直接下载 Releases 版本软件安装
+    https://github.com/thonny/thonny/releases
