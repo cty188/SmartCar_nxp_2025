@@ -1,9 +1,3 @@
-# 本示例程序演示如何通过 boot.py 文件进行 soft-boot 控制后执行自己的源文件
-# 使用 RT1021-MicroPython 核心板搭配对应拓展学习板的拨码开关控制
-
-# 示例程序运行效果为复位后执行本文件 通过 C18 电平状态跳转执行 user_main.py
-# C4 LED 会一秒周期闪烁
-
 # 从 machine 库包含所有内容
 from machine import *
 from smartcar import ticker
@@ -26,6 +20,8 @@ from Sensors.ccd import CCDTracker  # 从 Sensors.CCD 包含 CCDTracker
 from Algorithm.KalmanFilter import KalmanFilter,PitchKalmanFilter
 from Algorithm.MahonyFilter import MahonyFilter
 from Algorithm.pid import PIDController
+
+from Communication.lcd import LCDDisplay  # 从 Actuators 包含 LCDDisplay
 
 from Actuators.Motor import Motor
 
@@ -91,7 +87,7 @@ class BalanceCarController:
             max_out=10.0, # 最大输出速度(m/s)
             max_iout=5.0 # 最大积分输出
         )
-        self.base_target_pitch=9.5# 基础平衡俯仰角
+        self.base_target_pitch=9.5  # 基础平衡俯仰角
         self.target_pitch = 0.0  # 目标俯仰角
         
         # 2. 速度环PID控制器 (输出电机PWM)
@@ -116,7 +112,7 @@ class BalanceCarController:
         # 转向控制PID
         self.steering_pid = PIDController(
             mode=PIDController.PID_POSITION,
-            Kp=0.0,#-0.01,
+            Kp=0.0,  # -0.01 暂时禁用转向控制
             Ki=0.0,
             Kd=0.0,
             max_out=1.0,
@@ -133,6 +129,9 @@ class BalanceCarController:
             max_out=10.0,  # 最大期望倾角（度）
             max_iout=5.0   # 最大积分输出
         )
+        
+        # LCD显示
+        self.lcd_display = LCDDisplay()
         
         print("平衡小车控制器初始化完成")
     
@@ -170,63 +169,56 @@ class BalanceCarController:
         
         current_left_speed = self.left_motor.get_speed(1/CONTROL_FREQUENCY)
         current_right_speed = self.right_motor.get_speed(1/CONTROL_FREQUENCY)
-        # 3. 使用卡尔曼滤波器处理Pitch角
-        # 注意: Mahony滤波已经提供了角度估计，但卡尔曼滤波可以提供更平滑的结果
         
+        # 3. 使用卡尔曼滤波器处理Pitch角
         filtered_pitch = self.pitch_filter.update(
             pitch_rate=raw_gyro[1],  # 假设Y轴是俯仰轴
             pitch_measurement=pitch_angle
         )
         
         # 4. 速度环外部：目标速度->期望倾角
-        # 期望倾角 = speedtoangle_pid(实际速度, 目标速度)
-        target_speed = 1.0
         current_speed = (current_left_speed + current_right_speed) / 2.0
         delta_pitch = self.speed_to_angle_pid.compute(
             feedback=current_speed,
             setpoint=self.target_speed
         )
 
-        # 4. 串级PID控制：外环角度PID -> 内环速度PID
-        # 计算速度控制输出 (外环)
+        # 5. 串级PID控制：外环角度PID -> 内环速度PID
         target_speed_from_angle = self.angle_pid.compute(
             feedback=filtered_pitch,
-            setpoint=self.base_target_pitch #+ delta_pitch
+            setpoint=self.base_target_pitch  # 暂时禁用速度补偿: + delta_pitch
         )
 
-        # 5. 计算转向控制输出
-        #current_yaw = self.imu_processor.get_yaw()
+        # 6. 计算转向控制输出
         self.target_heading = self.ccd_tracker.get_line_angle(0)
         target_speed_from_steering = self.steering_pid.compute(
             feedback=0,
             setpoint=self.target_heading
         )
-        # 合并遥控目标速度
-        #print(target_speed_from_steering)
-        left_target_speed  = target_speed_from_angle  - target_speed_from_steering
+        
+        # 7. 设置目标速度
+        left_target_speed = target_speed_from_angle - target_speed_from_steering
         right_target_speed = target_speed_from_angle + target_speed_from_steering
 
-        # 6. 计算电机控制输出
+        # 8. 计算电机控制输出
         left_motor_output = self.left_speed_pid.compute(
             feedback=current_left_speed,
             setpoint=left_target_speed
         )
-        # 右轮速度PID控制
         right_motor_output = self.right_speed_pid.compute(
             feedback=current_right_speed,
             setpoint=right_target_speed
         )
-        # 8. 设置电机输出
+        
+        # 9. 设置电机输出
         self.left_motor.set_pwm(left_motor_output)
         self.right_motor.set_pwm(right_motor_output)
 
-        # 9. 调试输出
+        # 10. 调试输出
         if self.debug_enabled and self.loop_count % self.debug_interval == 0:
-            print(f"实际俯仰角: {filtered_pitch:.2f}°, 目标俯仰角: {raw_gyro[1]:.2f}°")
-            #print(f"当前左侧速度: {current_left_speed:.2f}m/s, 当前右侧速度: {current_right_speed:.2f}m/s")
-            #print(f"速度调整量: {target_pitch:.2f}°")
-            #print(f"平衡输出: {balance_output:.1f}, 转向输出: {steering_output:.1f}")
-            #print(f"电机PWM: 左={left_motor_output:.1f}, 右={right_motor_output:.1f}")
+            print(f"实际俯仰角: {filtered_pitch:.2f}°, 目标俯仰角: {self.base_target_pitch:.2f}°")
+            print(f"左轮速度: {current_left_speed:.2f}m/s, 右轮速度: {current_right_speed:.2f}m/s")
+            print(f"左轮PWM: {left_motor_output:.1f}, 右轮PWM: {right_motor_output:.1f}")
 
     def _balance_tick_handler(self, time):
         """定时器中断处理函数 - 在固定频率执行平衡控制任务"""
@@ -241,47 +233,12 @@ class BalanceCarController:
         
         # 更新控制
         self.update_balance_control()
-
-    def init_lcd(self):
-        """初始化LCD屏幕用于显示CCD数据"""
-        from display import LCD, LCD_Drv
-        cs = Pin('C5', Pin.OUT, pull=Pin.PULL_UP_47K, value=1)
-        cs.high()
-        cs.low()
-        rst = Pin('B9', Pin.OUT, pull=Pin.PULL_UP_47K, value=1)
-        dc = Pin('B8', Pin.OUT, pull=Pin.PULL_UP_47K, value=1)
-        blk = Pin('C4', Pin.OUT, pull=Pin.PULL_UP_47K, value=1)
-        drv = LCD_Drv(SPI_INDEX=1, BAUDRATE=60000000, DC_PIN=dc, RST_PIN=rst, LCD_TYPE=LCD_Drv.LCD200_TYPE)
-        lcd = LCD(drv)
-        lcd.color(0xFFFF, 0x0000)
-        lcd.mode(2)
-        lcd.clear(0x0000)
-        self.lcd = lcd
-        print("LCD初始化完成")
-
-    def update_ccd_display(self):
-        """在LCD上显示CCD双通道数据波形，并输出偏差角"""
-        if not hasattr(self, 'lcd'):
-            return
-        # 通道0波形
-        data0 = self.ccd_tracker.get_raw_data(0)
-        self.lcd.wave(0, 0, len(data0), 64, data0, max=4095)
-        angle0 = self.ccd_tracker.get_line_angle(0)
-        # 通道1波形（下半屏）
-        if len(self.ccd_tracker.channels) > 1:
-            data1 = self.ccd_tracker.get_raw_data(1)
-            self.lcd.wave(0, 64, len(data1), 64, data1, max=4095)
-            angle1 = self.ccd_tracker.get_line_angle(1)
-        else:
-            angle1 = None
-        # 如需在屏幕显示角度，可根据实际LCD驱动方法补充
-        # 例如: self.lcd.draw_string(0, 70, "A0: %.2f° A1: %.2f°" % (angle0, angle1 if angle1 is not None else 0), 0xFFFF, 0x0000)
-
+        self.loop_count += 1
+    
     def start(self):
         """启动平衡小车"""
         print("启动平衡小车...")
         self.is_running = True
-        self.init_lcd()  # 初始化LCD
         
         # 重置滤波器状态
         self.pitch_filter.reset()
@@ -292,31 +249,35 @@ class BalanceCarController:
         
         # 启动平衡控制定时器
         self.balance_ticker.start(1000 // CONTROL_FREQUENCY)  # 毫秒计算
-        try:
-            # 主循环仅处理非实时任务
-            while self.is_running:
-                # 显示CCD双通道数据和角度
-                self.update_ccd_display()
-                # 实时打印CCD双通道角度偏差
-                #for idx, ch in enumerate(self.ccd_tracker.channels):
-                    #angle = self.ccd_tracker.get_line_angle(idx)
-                    #print(f"[CCD{ch}] 当前角度偏差: {angle:.2f}°")
-                #print(f"[CCD{0}] 当前角度偏差: {self.ccd_tracker.get_line_angle(0):.2f}°")
-                if switch2.value() != state2:
-                    print("Test program stop.")
-                    break
-                time.sleep_ms(100)
-        except Exception as e:
-            print("Exception occurred:", e)
+        # 主循环仅处理非实时任务
+        while self.is_running:
+            # 更新CCD数据显示和系统状态
+            self.lcd_display.update_ccd_display(self.ccd_tracker)
+            self.lcd_display.show_system_status(
+                pitch=self.pitch_filter.get_last_filtered_pitch(),
+                left_speed=self.left_motor.get_speed(1/CONTROL_FREQUENCY),
+                right_speed=self.right_motor.get_speed(1/CONTROL_FREQUENCY),
+                voltage=self.read_battery_voltage(),
+                is_running=self.is_running
+            )
+            
+            # 检查拨码开关状态
+            if switch2.value() != state2:
+                print("测试程序停止")
+                break
+            
+            time.sleep_ms(100)
         gc.collect()
     
     def stop(self):
         """停止平衡小车"""
-        print("停止平衡小车...")
-        self.is_running = False
-        self.left_motor.set_pwm(0)  # 停止左侧电机
-        self.right_motor.set_pwm(0)  # 停止右侧电机
-        self.balance_ticker.stop()  # 停止定时器
+        if self.is_running:
+            print("Stopping balance car...")
+            self.is_running = False
+            self.left_motor.set_pwm(0)  # 停止左侧电机
+            self.right_motor.set_pwm(0)  # 停止右侧电机
+            self.balance_ticker.stop()  # 停止定时器
+            self.lcd_display.draw_text(100, 244, "Stopped", size=16, color=0xF800)
     
     def set_target_speed(self, speed):
         """设置目标速度"""
@@ -352,3 +313,4 @@ if __name__ == "__main__":
     
     # 启动平衡小车
     car_controller.start()
+
