@@ -62,18 +62,22 @@ class myUART:
         # MicroPython UART可能没有flush方法，这里留空
         pass
     
-def printf(uart: myUART, buffer: str) -> None:
+def printf(uart: myUART, buffer: str, print_console: bool = False) -> None:
     """
     通过UART输出字符串
     :param uart: myUART实例
     :param buffer: 要输出的字符串
+    :param print_console: 是否打印到控制台，默认False
     """
+    if print_console:
+        print("printf:", buffer)  # 打印到控制台
     uart.write_str(buffer)
     
 # 解析传入pid参数
 def parse_pid_params(input_str: str) -> tuple[float, float, float]:
     """
     解析PID参数字符串
+    
     :param input_str: 输入字符串，格式为"Kp,Ki,Kd"或"Kp Ki Kd"
     :return: (Kp, Ki, Kd)的元组
     :raises ValueError: 当输入格式不正确时抛出异常

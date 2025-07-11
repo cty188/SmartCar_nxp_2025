@@ -36,7 +36,7 @@ class PIDController:
         self.set = 0.0  # 目标值
         self.fdb = 0.0  # 反馈值
 
-    def _limit_max(self, value : f32, max_val : f32) -> f32:
+    def _limit_max(self, value, max_val):
         """限制值在[-max_val, max_val]范围内"""
         if value > max_val:
             return max_val
@@ -44,7 +44,7 @@ class PIDController:
             return -max_val
         return value
 
-    def compute(self, feedback : f32, setpoint : f32) -> f32:
+    def compute(self, feedback :f32, setpoint :f32) -> f32:
         """
         PID计算函数 - 独立执行，不影响其他PID实例
         

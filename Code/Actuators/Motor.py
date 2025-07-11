@@ -33,12 +33,15 @@ class Motor:
         # 电机参数
         self.pwm_value = 0  # 当前PWM值
         self.encoder_count = 0  # 当前编码器计数值
-        
+
+        # --- 累加编码器脉冲用于总里程 ---
+        self.encoder_total = 0
+
         # 物理参数 (根据实际硬件调整)
         self.wheel_diameter = 0.065  # 车轮直径(m)
         self.encoder_resolution = 1200  # 编码器每转脉冲数
         self.distance_per_pulse = math.pi * self.wheel_diameter / self.encoder_resolution
-        
+
         print(f"电机初始化完成: {pwm_pin}/{dir_pin}, 编码器: {encoder_a_pin}/{encoder_b_pin}")
     
     def set_pwm(self, pwm_value):
@@ -51,9 +54,18 @@ class Motor:
         self.pwm_value = clamped_pwm
     
     def update_encoder(self):
-        """更新编码器计数并返回脉冲增量"""
-        self.encoder_count = self.encoder.get()
-        return self.encoder_count 
+        """更新编码器计数并返回脉冲增量，同时累加总脉冲"""
+        now = self.encoder.get()
+        self.encoder_total += now
+        self.encoder_count = now
+        return now
+    def get_total_encoder(self):
+        """获取累计编码器脉冲数"""
+        return self.encoder_total
+
+    def get_total_distance(self):
+        """获取累计行驶距离（米）"""
+        return self.encoder_total * self.distance_per_pulse
     
     def get_speed(self, dt):
         """计算电机当前速度(m/s)"""
@@ -69,80 +81,3 @@ class Motor:
         self.current_count = self.encoder.get()
         print("电机状态已重置")
 
-
-class BalanceCarController:
-    """平衡小车控制主类"""
-    
-    def __init__(self):
-        # 初始化左侧电机
-        self.left_motor = Motor(
-            pwm_pin="C24", 
-            dir_pin="C26",
-            encoder_a_pin="D0",
-            encoder_b_pin="D1",
-            invert=True,
-            reverse_encoder=True
-        )
-        
-        # 初始化右侧电机
-        self.right_motor = Motor(
-            pwm_pin="C25", 
-            dir_pin="C27",
-            encoder_a_pin="D2",
-            encoder_b_pin="D3",
-            invert=True,
-            reverse_encoder=True
-        )
-        
-        # 其他初始化保持不变...
-    
-    def read_encoders(self):
-        """更新并获取编码器值"""
-        self.left_motor.update_encoder()
-        self.right_motor.update_encoder()
-        return self.left_motor.current_count, self.right_motor.current_count
-    
-    def calculate_speed(self):
-        """计算小车速度"""
-        # 获取采样间隔
-        dt = 1.0 / CONTROL_FREQUENCY
-        
-        # 计算左右轮速度
-        left_speed = self.left_motor.get_speed(dt)
-        right_speed = self.right_motor.get_speed(dt)
-        
-        # 计算小车线速度
-        linear_speed = (left_speed + right_speed) / 2.0
-        
-        return left_speed, right_speed
-    
-    def set_motor_pwm(self, left_pwm, right_pwm):
-        """设置电机PWM值"""
-        self.left_motor.set_pwm(left_pwm)
-        self.right_motor.set_pwm(right_pwm)
-    
-    def update_balance_control(self):
-        """更新平衡控制"""
-        # 其他代码保持不变...
-        
-        # 在调试输出中使用封装后的PWM属性
-        if self.debug_enabled and self.loop_count % self.debug_interval == 0:
-            print(f"电机PWM: 左={self.left_motor.pwm_value}, 右={self.right_motor.pwm_value}")
-    
-    def start(self):
-        """启动平衡小车"""
-        print("启动平衡小车...")
-        
-        # 重置电机状态
-        self.left_motor.reset()
-        self.right_motor.reset()
-        
-        # 其他代码保持不变...
-    
-    def stop(self):
-        """停止平衡小车"""
-        # 安全停止电机
-        self.left_motor.set_pwm(0)
-        self.right_motor.set_pwm(0)
-        
-        # 其他代码保持不变...

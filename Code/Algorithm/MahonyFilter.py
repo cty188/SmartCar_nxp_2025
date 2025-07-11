@@ -1,3 +1,4 @@
+import math 
 class MahonyFilter:
     """Mahony滤波器Python实现（无Numpy依赖）"""
     
@@ -111,12 +112,12 @@ class MahonyFilter:
         # 计算初始俯仰角 (确保分母不为零)
         denominator = math.sqrt(ax*ax + az*az)
         if denominator < 1e-6:
-            pitch = math.copysign(math.pi/2, ay)
+            roll = math.copysign(math.pi/2, ay)
         else:
-            pitch = math.atan2(ay, denominator)
+            roll = math.atan2(ay, denominator)
         
         # 计算初始滚转角
-        roll = math.atan2(-ax, az) if abs(az) > 1e-6 else 0.0
+        pitch = math.atan2(-ax, az) if abs(az) > 1e-6 else 0.0
         
         # 设置初始姿态
         self.reset(pitch, roll, 0.0)
