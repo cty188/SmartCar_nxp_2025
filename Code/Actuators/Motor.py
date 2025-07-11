@@ -68,6 +68,7 @@ class Motor:
         """更新编码器计数并返回脉冲增量，同时累加总脉冲"""
         now = self.encoder.get()
         self.encoder_total += now
+ 
         self.encoder_count = now
         return now
     def get_total_encoder(self):
@@ -91,4 +92,5 @@ class Motor:
         self.last_count = 0
         self.current_count = self.encoder.get()
         print("电机状态已重置")
+
 

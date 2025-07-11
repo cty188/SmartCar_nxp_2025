@@ -2,7 +2,7 @@
 import gc
 import time
 from machine import Pin
-from Communication.uart import myUART,printf
+from Communication.uart import myUART, printf, read_pid_params_safe
 
 # 定义硬件引脚
 led = Pin('C4', Pin.OUT, value=True)
@@ -14,16 +14,16 @@ uart = myUART(2)
 while True:
     # 每 500ms 读取一次 将数据再原样发回
     # uart.write_str("fine!")
-    printf(uart,"fine")
     
+    pid_params = read_pid_params_safe(uart)
+    if pid_params:
+        kp, ki, kd = pid_params
+        print("PID parameters are valid.")
+        print("Kp, Ki, Kd:", kp, ki, kd)
+        
     time.sleep_ms(2000)
     # 翻转 C4 LED 电平
     led.toggle()
-    
-    # 读取UART数据
-    received_data = uart.read()
-    if received_data:
-        print("Received:", received_data)
     
     # 如果拨码开关打开 对应引脚拉低 就退出循环
     # 这么做是为了防止写错代码导致异常 有一个退出的手段
@@ -33,6 +33,3 @@ while True:
 
     # 回收内存
     gc.collect()
-
-
-
