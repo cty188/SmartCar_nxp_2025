@@ -111,6 +111,8 @@ def read_pid_params_safe(uart: 'myUART'):
     :return: (kp, ki, kd) 或 None（无效或无数据）
     """
     pid_bytes = uart.read()
+    if  pid_bytes:
+        print("收到")
     pid_str = pid_bytes.decode().strip() if pid_bytes else ""
     if not pid_str:
         return None
