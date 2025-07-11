@@ -60,7 +60,7 @@ class BalanceCarController:
         self.is_running = False  # 小车运行状态
         
         # 调试数据类型选择
-        self.debug_data_type = "speed"  # 可选值: "raw", "angle", "speed", "pwm"
+        self.debug_data_type = "speed"  # 可选值: "raw", "attitude", "filtered_pitch", "speed", "pwm", "target", "encoder_circle", "all"
 
         # 电机控制相关
         self.left_motor = Motor(pwm_pin="C25", dir_pin="C27", 
@@ -100,16 +100,16 @@ class BalanceCarController:
         # 2. 速度环PID控制器 (输出电机PWM)
         self.left_speed_pid = PIDController(
             mode=PIDController.PID_POSITION,
-            Kp=1300.0,   # 速度环比例增益（值越大，响应越快）
-            Ki=10.0,     # 速度环积分增益（消除稳态误差）
+            Kp=2800.0,   # 速度环比例增益（值越大，响应越快）
+            Ki=20.0,     # 速度环积分增益（消除稳态误差）
             Kd=0.0,    # 速度环微分增益（抑制振荡）
             max_out=4000.0,  # 最大输出PWM
             max_iout=1000.0  # 最大积分输出
         )
         self.right_speed_pid = PIDController(
             mode=PIDController.PID_POSITION,
-            Kp=1600.0,   # 速度环比例增益（值越大，响应越快）
-            Ki=30.0,     # 速度环积分增益（消除稳态误差）
+            Kp=3200.0,   # 速度环比例增益（值越大，响应越快）
+            Ki=60.0,     # 速度环积分增益（消除稳态误差）
             Kd=0.0,    # 速度环微分增益（抑制振荡）
             max_out=4000.0,  # 最大输出PWM
             max_iout=1000.0  # 最大积分输出
@@ -206,8 +206,20 @@ class BalanceCarController:
         )
 
         # 7. 设置目标速度
-        left_target_speed = target_speed_from_angle - target_speed_from_steering
-        right_target_speed = target_speed_from_angle + target_speed_from_steering
+        #left_target_speed = target_speed_from_angle - target_speed_from_steering
+        #right_target_speed = target_speed_from_angle + target_speed_from_steering
+
+        # 每隔2秒切换一次期望速度，便于调参
+        if not hasattr(self, '_speed_switch_time'):
+            self._speed_switch_time = time.ticks_ms()
+            self._speed_list = [0,3, 0, -3]
+            self._speed_index = 0
+        now = time.ticks_ms()
+        if time.ticks_diff(now, self._speed_switch_time) > 2000:
+            self._speed_index = (self._speed_index + 1) % len(self._speed_list)
+            self._speed_switch_time = now
+        left_target_speed = self._speed_list[self._speed_index]
+        right_target_speed = self._speed_list[self._speed_index]
 
         # 8. 计算电机控制输出
         
@@ -244,9 +256,9 @@ class BalanceCarController:
             printf(debug_uart, f"{filtered_pitch:.3f},{self.base_target_pitch:.3f}", print_console=False)
         elif dtype == "speed":
             # 速度
-            if self.debug_enabled and self.loop_count % self.debug_interval == 0:
-                printf(debug_uart, f"左右轮速度: {current_left_speed:.3f},{current_right_speed:.3f}", print_console=True)
-            printf(debug_uart, f"{current_left_speed:.3f},{current_right_speed:.3f}", print_console=False)
+            #if self.debug_enabled and self.loop_count % self.debug_interval == 0:
+                #printf(debug_uart, f"左右轮速度: {current_left_speed:.3f},{current_right_speed:.3f}", print_console=True)
+            printf(debug_uart, f": {current_left_speed:.3f},{current_right_speed:.3f}", print_console=False)
         elif dtype == "pwm":
             # PWM
             if self.debug_enabled and self.loop_count % self.debug_interval == 0:
@@ -379,5 +391,6 @@ if __name__ == "__main__":
     
     # 启动平衡小车
     car_controller.start()
+
 
 

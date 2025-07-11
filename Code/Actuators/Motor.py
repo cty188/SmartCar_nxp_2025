@@ -1,5 +1,16 @@
-# 注意：以下是修改后的代码，主要将电机操作封装为Motor类
-# 其余部分代码保持不变，仅展示修改部分
+# 从 machine 库包含所有内容
+from machine import *
+
+# 从 seekfree 库包含 MOTOR_CONTROLLER
+from seekfree import MOTOR_CONTROLLER
+from smartcar import ticker
+from smartcar import encoder
+
+import math
+# 包含 gc 类
+import gc   
+# 包含 time 类
+import time
 
 class Motor:
     """电机控制类，封装单个电机的所有操作"""
@@ -38,8 +49,8 @@ class Motor:
         self.encoder_total = 0
 
         # 物理参数 (根据实际硬件调整)
-        self.wheel_diameter = 0.065  # 车轮直径(m)
-        self.encoder_resolution = 1200  # 编码器每转脉冲数
+        self.wheel_diameter = 0.064  # 车轮直径(m)
+        self.encoder_resolution = 2500  # 编码器每转脉冲数
         self.distance_per_pulse = math.pi * self.wheel_diameter / self.encoder_resolution
 
         print(f"电机初始化完成: {pwm_pin}/{dir_pin}, 编码器: {encoder_a_pin}/{encoder_b_pin}")
