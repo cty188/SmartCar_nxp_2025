@@ -20,6 +20,7 @@ boot_select = Pin('C18', Pin.IN , pull = Pin.PULL_UP_47K)
 if boot_select.value() == 0:
     try:
         os.chdir("/flash")
-        execfile("test.py")
+        execfile("main.py")
     except:
         print("File not found.")
+

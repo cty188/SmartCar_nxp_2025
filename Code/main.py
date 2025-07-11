@@ -22,7 +22,7 @@ from Algorithm.MahonyFilter import MahonyFilter
 from Algorithm.pid import PIDController
 
 
-from Communication.uart import myUART, printf  # 导入 myUART 和 printf
+from Communication.uart import myUART, printf, read_pid_params_safe
 from Communication.lcd import LCDDisplay  # 从 Actuators 包含 LCDDisplay
 
 from Actuators.Motor import Motor
@@ -328,7 +328,12 @@ class BalanceCarController:
             if switch2.value() != state2:
                 printf(debug_uart, "测试程序停止", print_console=True)
                 break
-            
+
+            pid_params = read_pid_params_safe(debug_uart)
+            if pid_params:
+                kp, ki, kd = pid_params
+                self.adjust_pid_parameters(Kp=kp, Ki=ki, Kd=kd)
+
             time.sleep_ms(100)
         gc.collect()
     
@@ -379,5 +384,3 @@ if __name__ == "__main__":
     
     # 启动平衡小车
     car_controller.start()
-
-

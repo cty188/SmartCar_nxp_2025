@@ -20,12 +20,8 @@ class myUART:
         buf_len = self.uart.any()
         if buf_len:
             buf = self.uart.read(buf_len)
-            print("uart received ={:>6d},content:{}".format(buf_len, buf))
-            self.uart.write("self.uart:")
-            self.uart.write(buf)
-            self.uart.write("\n")
             return buf
-        return b""  # 返回空字节串当没有数据时
+        return ""  # 返回空字节串当没有数据时
 
     def writeln(self, data: str) -> None:
         """
@@ -34,12 +30,12 @@ class myUART:
         """
         self.uart.write(data + "\n")
     
-    def write_str(self, data: str) -> None:
+    def write_str(self, data: str, end : str = '\n') -> None:
         """
         写入字符串数据
         :param data: 要写入的字符串数据
         """
-        self.writeln(data)
+        self.uart.write(data + end)
 
     def write_bytes(self, data: bytes) -> None:
         """
@@ -62,7 +58,7 @@ class myUART:
         # MicroPython UART可能没有flush方法，这里留空
         pass
     
-def printf(uart: myUART, buffer: str, print_console: bool = False) -> None:
+def printf(uart: myUART, buffer: str, print_console: bool = False, end : str = '\n') -> None:
     """
     通过UART输出字符串
     :param uart: myUART实例
@@ -74,7 +70,7 @@ def printf(uart: myUART, buffer: str, print_console: bool = False) -> None:
     uart.write_str(buffer)
     
 # 解析传入pid参数
-def parse_pid_params(input_str: str) -> tuple[float, float, float]:
+def parse_pid_params(input_str: str):
     """
     解析PID参数字符串
     
@@ -108,19 +104,22 @@ def parse_pid_params(input_str: str) -> tuple[float, float, float]:
     except Exception as e:
         raise ValueError(f"解析PID参数时发生错误: {str(e)}")
 
-def validate_pid_params(kp: float, ki: float, kd: float) -> bool:
+def read_pid_params_safe(uart: 'myUART'):
     """
-    验证PID参数是否在合理范围内
-    :param kp: 比例增益
-    :param ki: 积分增益
-    :param kd: 微分增益
-    :return: 如果参数合理返回True，否则返回False
+    从UART读取并解析PID参数，自动处理无效文本和异常。
+    :param uart: myUART实例
+    :return: (kp, ki, kd) 或 None（无效或无数据）
     """
-    # 基本范围检查（可根据实际需求调整）
-    if kp < 0 or kp > 1000:
-        return False
-    if ki < 0 or ki > 100:
-        return False
-    if kd < 0 or kd > 100:
-        return False
-    return True 
+    pid_bytes = uart.read()
+    pid_str = pid_bytes.decode().strip() if pid_bytes else ""
+    if not pid_str:
+        return None
+    try:
+        kp, ki, kd = parse_pid_params(pid_str)
+        return kp, ki, kd
+    except Exception as e:
+        print("PID参数解析失败：", e)
+        return None
+
+
+
