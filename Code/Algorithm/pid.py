@@ -2,7 +2,7 @@ class PIDController:
     PID_POSITION = 0
     PID_DELTA = 1
     
-    def __init__(self, mode, Kp, Ki, Kd, max_out, max_iout):
+    def __init__(self, mode, Kp, Ki, Kd, max_out, max_iout, ff_gain=1.0):
         """
         PID控制器初始化 - 每个实例独立维护状态
         
@@ -13,6 +13,7 @@ class PIDController:
         Kd - 微分系数
         max_out - 最大输出限制
         max_iout - 积分项最大限制
+        ff_gain - 前馈系数，默认1.0
         """
         # 控制参数
         self.mode = mode
@@ -21,6 +22,7 @@ class PIDController:
         self.Kd = Kd
         self.max_out = max_out
         self.max_iout = max_iout
+        self.ff_gain = ff_gain
         
         # 历史状态数据 - 每个实例独立
         self.Dbuf = [0.0, 0.0, 0.0]  # 微分项历史数据 [当前, 前一次, 前两次]
@@ -44,13 +46,14 @@ class PIDController:
             return -max_val
         return value
 
-    def compute(self, feedback :f32, setpoint :f32) -> f32:
+    def compute(self, feedback, setpoint, feedforward=0.0):
         """
         PID计算函数 - 独立执行，不影响其他PID实例
         
         参数:
         feedback - 当前反馈值
         setpoint - 目标设定值
+        feedforward - 前馈量，单位与反馈值相同
         
         返回:
         PID控制输出
@@ -79,8 +82,8 @@ class PIDController:
             self.Dbuf[0] = self.error[0] - self.error[1]
             self.Dout = self.Kd * self.Dbuf[0]
             
-            # 总输出 = P + I + D
-            self.out = self.Pout + self.Iout + self.Dout
+            # 总输出 = P + I + D + 前馈*系数
+            self.out = self.Pout + self.Iout + self.Dout + self.ff_gain * feedforward
             
         elif self.mode == self.PID_DELTA:
             # === 增量式PID ===
@@ -96,8 +99,8 @@ class PIDController:
             self.Dbuf[0] = self.error[0] - 2.0 * self.error[1] + self.error[2]
             self.Dout = self.Kd * self.Dbuf[0]
             
-            # 总输出 = 上次输出 + Δ(P+I+D)
-            self.out += self.Pout + self.Iout + self.Dout
+            # 总输出 = 上次输出 + Δ(P+I+D) + 前馈*系数
+            self.out += self.Pout + self.Iout + self.Dout + self.ff_gain * feedforward
         
         # 应用输出限制
         self.out = self._limit_max(self.out, self.max_out)
@@ -129,6 +132,7 @@ class PIDController:
             'Kd': self.Kd,
             'max_out': self.max_out,
             'max_iout': self.max_iout,
+            'ff_gain': self.ff_gain,
             'current_out': self.out
         }
 
