@@ -85,6 +85,11 @@ class BalanceCarController:
         self.balance_ticker.capture_list(self.left_motor.encoder, self.right_motor.encoder, self.imu_processor.imu, self.ccd_tracker.ccd)
         self.balance_ticker.callback(self._balance_tick_handler)
         
+        self.base_target_pitch=10.5  # 基础平衡俯仰角
+        self.target_pitch = 0.0  # 目标俯仰角
+        self.target_speed = 0  # 目标速度(m/s)
+        self.target_heading = 0.0  # 目标偏航角(度)
+        # 初始化PID控制器
         # 1. 角度环PID控制器 (输出目标速度)
         self.angle_pid = PIDController(
             mode=PIDController.PID_POSITION,
@@ -94,9 +99,7 @@ class BalanceCarController:
             max_out=10.0, # 最大输出速度(m/s)
             max_iout=5.0 # 最大积分输出
         )
-        self.base_target_pitch=10.5  # 基础平衡俯仰角
-        self.target_pitch = 0.0  # 目标俯仰角
-        
+
         # 2. 速度环PID控制器 (输出电机PWM)
         self.left_speed_pid = PIDController(
             mode=PIDController.PID_POSITION,
@@ -114,7 +117,6 @@ class BalanceCarController:
             max_out=4000.0,  # 最大输出PWM
             max_iout=1000.0  # 最大积分输出
         )
-        self.target_speed = 0  # 目标速度(m/s)
         
         # 转向控制PID
         self.steering_pid = PIDController(
@@ -125,16 +127,15 @@ class BalanceCarController:
             max_out=1.0,
             max_iout=0.5
         )
-        self.target_heading = 0.0  # 目标偏航角(度)
-        
-        # 速度环外部目标速度->期望倾角 PID 控制器
-        self.speed_to_angle_pid = PIDController(
+
+        # 速度到PWM输出的PID控制器（速度环）
+        self.speed_to_pwm_pid = PIDController(
             mode=PIDController.PID_POSITION,
-            Kp=3000,   # 速度到倾角的比例增益（需根据实际调试）
-            Ki=0.0,  # 积分增益
-            Kd=0.0,   # 微分增益
-            max_out=4000.0,  # 最大期望倾角（度）
-            max_iout=1000.0   # 最大积分输出
+            Kp=3000,   # 速度到PWM的比例增益（需根据实际调试）
+            Ki=0.0,    # 积分增益
+            Kd=0.0,    # 微分增益
+            max_out=4000.0,  # 最大PWM输出
+            max_iout=1000.0  # 最大积分输出
         )
         
         # LCD显示
@@ -187,7 +188,7 @@ class BalanceCarController:
 
         # 4. 速度环外部：目标速度->期望倾角
         current_speed = (current_left_speed + current_right_speed) / 2.0
-        delta_pwm = self.speed_to_angle_pid.compute(
+        delta_pwm = self.speed_to_pwm_pid.compute(
             feedback=current_speed,
             setpoint= -self.target_speed
         )
