@@ -122,5 +122,23 @@ def read_pid_params_safe(uart: 'myUART'):
         print("PID参数解析失败：", e)
         return None
 
-
+def parse_track_info(data: bytes):
+    """
+    解析ART.py发送的赛道类型信息
+    :param data: UART接收到的原始字节数据（如b'\x05S_CURVE\r\n'）
+    :return: (track_type: int, track_name: str) 或 None（格式不符）
+    """
+    if not data or len(data) < 2:
+        return None
+    track_type = data[0]
+    # 查找第一个换行符，提取名称
+    try:
+        # 赛道名称以\r\n结尾
+        name_end = data.find(b'\r\n', 1)
+        if name_end == -1:
+            name_end = len(data)
+        track_name = data[1:name_end].decode(errors='ignore').strip()
+        return track_type, track_name
+    except Exception as e:
+        return None
 

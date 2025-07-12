@@ -60,7 +60,7 @@ class BalanceCarController:
         self.is_running = False  # 小车运行状态
         
         # 调试数据类型选择
-        self.debug_data_type = ""  # 可选值: "raw", "attitude", "filtered_pitch", "speed", "pwm", "target", "encoder_circle", "all"
+        self.debug_data_type = "speed"  # 可选值: "raw", "attitude", "filtered_pitch", "speed", "pwm", "target", "encoder_circle", "all"
 
         # 电机控制相关
         self.left_motor = Motor(pwm_pin="C25", dir_pin="C27", 
@@ -85,11 +85,6 @@ class BalanceCarController:
         self.balance_ticker.capture_list(self.left_motor.encoder, self.right_motor.encoder, self.imu_processor.imu, self.ccd_tracker.ccd)
         self.balance_ticker.callback(self._balance_tick_handler)
         
-        self.base_target_pitch=10.5  # 基础平衡俯仰角
-        self.target_pitch = 0.0  # 目标俯仰角
-        self.target_speed = 0  # 目标速度(m/s)
-        self.target_heading = 0.0  # 目标偏航角(度)
-        # 初始化PID控制器
         # 1. 角度环PID控制器 (输出目标速度)
         self.angle_pid = PIDController(
             mode=PIDController.PID_POSITION,
@@ -99,7 +94,9 @@ class BalanceCarController:
             max_out=10.0, # 最大输出速度(m/s)
             max_iout=5.0 # 最大积分输出
         )
-
+        self.base_target_pitch=1.5  # 基础平衡俯仰角
+        self.target_pitch = 0.0  # 目标俯仰角
+        
         # 2. 速度环PID控制器 (输出电机PWM)
         self.left_speed_pid = PIDController(
             mode=PIDController.PID_POSITION,
@@ -111,31 +108,34 @@ class BalanceCarController:
         )
         self.right_speed_pid = PIDController(
             mode=PIDController.PID_POSITION,
-            Kp=3600.0,   # 速度环比例增益（值越大，响应越快）
+            Kp=4500.0,   # 速度环比例增益（值越大，响应越快）
             Ki=200.0,     # 速度环积分增益（消除稳态误差）
             Kd=0.0,    # 速度环微分增益（抑制振荡）
             max_out=4000.0,  # 最大输出PWM
             max_iout=1000.0  # 最大积分输出
         )
+        self.target_speed = 0.8  # 目标速度(m/s)
         
         # 转向控制PID
         self.steering_pid = PIDController(
             mode=PIDController.PID_POSITION,
-            Kp=-0.012,  # -0.01 暂时禁用转向控制
-            Ki=0.00,
-            Kd=0.0,
+            Kp=0.018 ,  # -0.01 暂时禁用转向控制
+            Ki=0.0,
+            Kd=0.08,
             max_out=1.0,
-            max_iout=0.5
+            max_iout=0.5,
+            ff_gain=0.00
         )
-
-        # 速度到PWM输出的PID控制器（速度环）
-        self.speed_to_pwm_pid = PIDController(
+        self.target_heading = 0.0  # 目标偏航角(度)
+        
+        # 速度环外部目标速度->期望倾角 PID 控制器
+        self.speed_to_angle_pid = PIDController(
             mode=PIDController.PID_POSITION,
-            Kp=3000,   # 速度到PWM的比例增益（需根据实际调试）
-            Ki=0.0,    # 积分增益
-            Kd=0.0,    # 微分增益
-            max_out=4000.0,  # 最大PWM输出
-            max_iout=1000.0  # 最大积分输出
+            Kp=1.0,   # 速度到倾角的比例增益（需根据实际调试）
+            Ki=0.25,  # 积分增益
+            Kd=0.0,   # 微分增益
+            max_out=40.0,  # 最大期望倾角（度）
+            max_iout=4.0   # 最大积分输出
         )
         
         # LCD显示
@@ -188,39 +188,41 @@ class BalanceCarController:
 
         # 4. 速度环外部：目标速度->期望倾角
         current_speed = (current_left_speed + current_right_speed) / 2.0
-        delta_pwm = self.speed_to_pwm_pid.compute(
+        delta_pitch = self.speed_to_angle_pid.compute(
             feedback=current_speed,
-            setpoint= -self.target_speed
+            setpoint=-self.target_speed
         )
 
         # 5. 串级PID控制：外环角度PID -> 内环速度PID
         target_speed_from_angle = self.angle_pid.compute(
             feedback=filtered_pitch,
-            setpoint=self.base_target_pitch
+            setpoint=self.base_target_pitch - delta_pitch  # 基础平衡角 + 速度环输出的倾角
         )
 
-        # 6. 计算转向控制输出
-        self.target_heading = self.ccd_tracker.get_line_angle(0)
+        # 6. 计算转向控制输出 
+        self.target_heading = self.ccd_tracker.get_line_angle(1)
         #printf(debug_uart, f"{self.target_heading:.2f},{self.ccd_tracker.get_line_angle(1):.2f}")
 
         target_speed_from_steering = self.steering_pid.compute(
             feedback=0,
-            setpoint=self.target_heading
+            setpoint= - self.target_heading,
+            feedforward = 0.0
+            #feedforward= - self.ccd_tracker.get_line_angle(0)
         )
 
         # 7. 设置目标速度
-        left_target_speed = target_speed_from_angle#- delta_target_speed#target_speed_from_angle  - delta_target_speed#- target_speed_from_steering
-        right_target_speed = target_speed_from_angle#- delta_target_speed#target_speed_from_angle - delta_target_speed#+ target_speed_from_steering
+        left_target_speed = target_speed_from_angle - target_speed_from_steering
+        right_target_speed = target_speed_from_angle+ target_speed_from_steering
 
         # 8. 计算电机控制输出
         left_motor_output = self.left_speed_pid.compute(
             feedback=current_left_speed,
             setpoint=left_target_speed
-        ) + delta_pwm
+        )
         right_motor_output = self.right_speed_pid.compute(
             feedback=current_right_speed,
             setpoint=right_target_speed
-        ) + delta_pwm
+        ) 
 
         # 9. 设置电机输出
         self.left_motor.set_pwm(left_motor_output)
@@ -393,4 +395,6 @@ if __name__ == "__main__":
     
     # 启动平衡小车
     car_controller.start()
+
+
 
