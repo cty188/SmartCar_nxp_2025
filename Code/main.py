@@ -60,7 +60,7 @@ class BalanceCarController:
         self.is_running = False  # 小车运行状态
         
         # 调试数据类型选择
-        self.debug_data_type = "speed"  # 可选值: "raw", "attitude", "filtered_pitch", "speed", "pwm", "target", "encoder_circle", "all"
+        self.debug_data_type = ""  # 可选值: "raw", "attitude", "filtered_pitch", "speed", "pwm", "target", "encoder_circle", "all"
 
         # 电机控制相关
         self.left_motor = Motor(pwm_pin="C25", dir_pin="C27", 
@@ -189,7 +189,7 @@ class BalanceCarController:
         current_speed = (current_left_speed + current_right_speed) / 2.0
         delta_pwm = self.speed_to_angle_pid.compute(
             feedback=current_speed,
-            setpoint=self.target_speed
+            setpoint= -self.target_speed
         )
 
         # 5. 串级PID控制：外环角度PID -> 内环速度PID
@@ -392,5 +392,4 @@ if __name__ == "__main__":
     
     # 启动平衡小车
     car_controller.start()
-
 
