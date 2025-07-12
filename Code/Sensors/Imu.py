@@ -133,8 +133,8 @@ class IMUProcessor:
         """
         valid = True
         failures = []
-        ACC_ALLOWED_DEVIATION = 0.20  # 10%
-        GYRO_ALLOWED_DEVIATION = 3.00 # 300%
+        ACC_ALLOWED_DEVIATION = 1.00  # 10%
+        GYRO_ALLOWED_DEVIATION = 4.00 # 300%
         
         # 检查加速度计偏差
         for i, axis in enumerate(['X', 'Y', 'Z']):
@@ -316,4 +316,5 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 

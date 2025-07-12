@@ -115,7 +115,6 @@ class BalanceCarController:
             max_out=4000.0,  # 最大输出PWM
             max_iout=1000.0  # 最大积分输出
         )
-        self.target_speed = 0.4  # 目标速度(m/s)
         
         # 转向控制PID
         self.steering_pid = PIDController(
@@ -127,6 +126,10 @@ class BalanceCarController:
             max_iout=0.5,
             ff_gain=0.00
         )
+        self.target_heading = 0.0  # 目标偏航角(度)
+        
+        # 速度环外部目标速度->期望倾角 PID 控制器
+        self.speed_to_angle_pid = PIDController(
         self.target_heading = 0.0  # 目标偏航角(度)
         
         # 速度环外部目标速度->期望倾角 PID 控制器
@@ -202,10 +205,15 @@ class BalanceCarController:
 
         # 6. 计算转向控制输出 
         self.target_heading = self.ccd_tracker.get_line_angle(1)
+        # 6. 计算转向控制输出 
+        self.target_heading = self.ccd_tracker.get_line_angle(1)
         #printf(debug_uart, f"{self.target_heading:.2f},{self.ccd_tracker.get_line_angle(1):.2f}")
 
         target_speed_from_steering = self.steering_pid.compute(
             feedback=0,
+            setpoint= - self.target_heading,
+            feedforward = 0.0
+            #feedforward= - self.ccd_tracker.get_line_angle(0)
             setpoint= - self.target_heading,
             feedforward = 0.0
             #feedforward= - self.ccd_tracker.get_line_angle(0)
@@ -220,9 +228,11 @@ class BalanceCarController:
             feedback=current_left_speed,
             setpoint=left_target_speed
         )
+        )
         right_motor_output = self.right_speed_pid.compute(
             feedback=current_right_speed,
             setpoint=right_target_speed
+        ) 
         ) 
 
         # 9. 设置电机输出
