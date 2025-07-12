@@ -100,8 +100,6 @@ class IMUProcessor:
             # 检查与期望值的偏差
             valid, failures = self._check_deviation(acc_bias, gyro_bias, expected_acc_bias, expected_gyro_bias)
             
-            valid = 1
-            
             if valid:
                 # 保存有效的校准值
                 self.acc_bias = acc_bias
@@ -140,7 +138,15 @@ class IMUProcessor:
         
         # 检查加速度计偏差
         for i, axis in enumerate(['X', 'Y', 'Z']):
-            # 计算偏差百分比
+            if axis == 'Y':
+                # 只对Y轴做范围校验，不与标准值比较
+                if not (-200 < acc_bias[i] < 200):
+                    valid = False
+                    failures.append(
+                        "加速度计Y轴超出合理范围: %.4f" % acc_bias[i]
+                    )
+                continue
+            # 计算偏差百分比（X、Z轴仍与标准值比较）
             if abs(expected_acc[i]) > 1e-6:  # 避免除以零
                 deviation = abs(acc_bias[i] - expected_acc[i]) / abs(expected_acc[i])
                 if deviation > ACC_ALLOWED_DEVIATION:

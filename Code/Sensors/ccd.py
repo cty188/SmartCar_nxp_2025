@@ -193,7 +193,7 @@ class CCDTracker:
         
         # 5. 无效线段处理：急弯冲出弯道处理
         # 常见于急转弯或丢失赛道，此时使用上次的偏移值保持控制连续性
-        print(f"警告[通道{idx}]: 未检测到有效线段（宽度={segment_width}），使用上次偏移值")
+        #print(f"警告[通道{idx}]: 未检测到有效线段（宽度={segment_width}），使用上次偏移值")
         return self.last_offset[idx]
 
     def get_line_angle(self, idx=0, threshold=None, pixel_length=128, fov_deg=120):
@@ -255,3 +255,4 @@ class CCDTracker:
         调用底层驱动库的信息输出方法
         """
         self.ccd.info()
+

@@ -47,7 +47,7 @@ class BalanceCarController:
         初始化平衡小车控制器
         """
         # 初始化IMU处理器 (100Hz采样率)
-        self.imu_processor = IMUProcessor(sample_rate=CONTROL_FREQUENCY, kp=0.5, ki=0.01)
+        self.imu_processor = IMUProcessor(sample_rate=CONTROL_FREQUENCY, kp=3, ki=0.01)
 
         # 执行陀螺仪零偏校准
         printf(debug_uart, "执行陀螺仪零偏校准...", print_console=True)
@@ -60,7 +60,7 @@ class BalanceCarController:
         self.is_running = False  # 小车运行状态
         
         # 调试数据类型选择
-        self.debug_data_type = "filtered_pitch"  # 可选值: "raw", "attitude", "filtered_pitch", "speed", "pwm", "target", "encoder_circle", "all"
+        self.debug_data_type = "speed"  # 可选值: "raw", "attitude", "filtered_pitch", "speed", "pwm", "target", "encoder_circle", "all"
 
         # 电机控制相关
         self.left_motor = Motor(pwm_pin="C25", dir_pin="C27", 
@@ -94,7 +94,7 @@ class BalanceCarController:
             max_out=10.0, # 最大输出速度(m/s)
             max_iout=5.0 # 最大积分输出
         )
-        self.base_target_pitch=2.0  # 基础平衡俯仰角
+        self.base_target_pitch=10.5  # 基础平衡俯仰角
         self.target_pitch = 0.0  # 目标俯仰角
         
         # 2. 速度环PID控制器 (输出电机PWM)
@@ -130,11 +130,11 @@ class BalanceCarController:
         # 速度环外部目标速度->期望倾角 PID 控制器
         self.speed_to_angle_pid = PIDController(
             mode=PIDController.PID_POSITION,
-            Kp=1.0,   # 速度到倾角的比例增益（需根据实际调试）
+            Kp=3000,   # 速度到倾角的比例增益（需根据实际调试）
             Ki=0.0,  # 积分增益
-            Kd=1.0,   # 微分增益
-            max_out=10.0,  # 最大期望倾角（度）
-            max_iout=2.0   # 最大积分输出
+            Kd=0.0,   # 微分增益
+            max_out=4000.0,  # 最大期望倾角（度）
+            max_iout=1000.0   # 最大积分输出
         )
         
         # LCD显示
@@ -200,14 +200,16 @@ class BalanceCarController:
 
         # 6. 计算转向控制输出
         self.target_heading = self.ccd_tracker.get_line_angle(0)
+        #printf(debug_uart, f"{self.target_heading:.2f},{self.ccd_tracker.get_line_angle(1):.2f}")
+
         target_speed_from_steering = self.steering_pid.compute(
             feedback=0,
             setpoint=self.target_heading
         )
 
         # 7. 设置目标速度
-        left_target_speed = target_speed_from_angle
-        right_target_speed = target_speed_from_angle
+        left_target_speed = target_speed_from_angle#- delta_target_speed#target_speed_from_angle  - delta_target_speed#- target_speed_from_steering
+        right_target_speed = target_speed_from_angle#- delta_target_speed#target_speed_from_angle - delta_target_speed#+ target_speed_from_steering
 
         # 8. 计算电机控制输出
         left_motor_output = self.left_speed_pid.compute(
@@ -244,9 +246,13 @@ class BalanceCarController:
             printf(debug_uart, f": {filtered_pitch:.3f}", print_console=True)
         elif dtype == "speed":
             # 速度
-            #if self.debug_enabled and self.loop_count % self.debug_interval == 0:
-                #printf(debug_uart, f"左右轮速度: {current_left_speed:.3f},{current_right_speed:.3f}", print_console=True)
-            printf(debug_uart, f": {current_left_speed:.3f},{current_right_speed:.3f}", print_console=False)
+            total_speed = (current_left_speed + current_right_speed) / 2.0
+            expected_pitch = self.base_target_pitch
+            if self.debug_enabled and self.loop_count % self.debug_interval == 0:
+                total_speed = (current_left_speed + current_right_speed) / 2.0
+                expected_pitch = self.base_target_pitch
+                printf(debug_uart, f"L:{current_left_speed:.3f} R:{current_right_speed:.3f} Total:{total_speed:.3f} filtered_pitch:{filtered_pitch:.3f} expected_pitch:{expected_pitch:.3f}", print_console=True)
+            printf(debug_uart, f"L:{current_left_speed:.3f} R:{current_right_speed:.3f} Total:{total_speed:.3f} filtered_pitch:{filtered_pitch:.3f} expected_pitch:{expected_pitch:.3f}", print_console=True)
         elif dtype == "pwm":
             # PWM
             if self.debug_enabled and self.loop_count % self.debug_interval == 0:
